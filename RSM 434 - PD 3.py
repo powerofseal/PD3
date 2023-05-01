@@ -9,7 +9,7 @@ import requests
 import time
 
 s = requests.Session()
-s.headers.update({'X-API-key': '********'})
+s.headers.update({'X-API-key': '3B4SOY7N'})
 
 def get_status():
     resp = s.get('http://localhost:9999/v1/case')
