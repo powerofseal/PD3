@@ -1,15 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Oct 25 14:20:02 2019
-in_a_dndMixin_drag
-@author: trader53
-"""
-
 import requests
 import time
 
 s = requests.Session()
-s.headers.update({'X-API-key': '6Y2YZJPO'})
+s.headers.update({'X-API-key': '********'})
 
 def get_status():
     resp = s.get('http://localhost:9999/v1/case')
