@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Oct 25 14:20:02 2019
-
+in_a_dndMixin_drag
 @author: trader53
 """
 
@@ -9,7 +9,7 @@ import requests
 import time
 
 s = requests.Session()
-s.headers.update({'X-API-key': 'OPBGO9TS'})
+s.headers.update({'X-API-key': '6Y2YZJPO'})
 
 def get_status():
     resp = s.get('http://localhost:9999/v1/case')
@@ -75,10 +75,11 @@ def is_received (order_id):
 def main():
     TRADING_LIMIT = 5000
     POSITION_LIMIT = 100000
+    CONFIDENCE_LEVEL = 0.95
     
-    GEM_estimate = {'min' : 20, 'max' : 30, 'average' : 25}
-    UB_estimate = {'min' : 40, 'max' : 60, 'average' : 50}
-    ETF_estimate = {'min' : 60, 'max' : 90, 'average' : 75}
+    GEM_estimate = {'min' : 20, 'max' : 30}
+    UB_estimate = {'min' : 40, 'max' : 60}
+    ETF_estimate = {'min' : 60, 'max' : 90}
     
     order_id = 0
     
@@ -101,20 +102,20 @@ def main():
         ask_price_GEM = book['GEM']['asks'][0]['price']
         bid_price_ETF = book['ETF']['bids'][0]['price']
         ask_price_ETF = book['ETF']['asks'][0]['price']
-        
-        bid_quantity_UB = book['UB']['bids'][0]['quantity'] - book['UB']['bids'][0]['quantity_filled']
-        ask_quantity_UB = book['UB']['asks'][0]['quantity'] - book['UB']['asks'][0]['quantity_filled']
-        bid_quantity_GEM = book['GEM']['bids'][0]['quantity'] - book['GEM']['bids'][0]['quantity_filled']
-        ask_quantity_GEM = book['GEM']['asks'][0]['quantity'] - book['GEM']['asks'][0]['quantity_filled']
-        bid_quantity_ETF = book['ETF']['bids'][0]['quantity'] - book['ETF']['bids'][0]['quantity_filled']
-        ask_quantity_ETF = book['ETF']['asks'][0]['quantity'] - book['ETF']['asks'][0]['quantity_filled']
 
-        ask_quantity_UB = min (ask_quantity_UB, POSITION_LIMIT - (UB_position + abs(GEM_position) + abs(ETF_position)))
-        bid_quantity_UB = min (bid_quantity_UB, POSITION_LIMIT - (- UB_position + abs(GEM_position) + abs(ETF_position)))
-        ask_quantity_GEM = min (ask_quantity_GEM, POSITION_LIMIT - (abs(UB_position) + GEM_position + abs(ETF_position)))
-        bid_quantity_GEM = min (bid_quantity_GEM, POSITION_LIMIT - (abs(UB_position) - GEM_position + abs(ETF_position)))
-        ask_quantity_ETF = min (ask_quantity_ETF, POSITION_LIMIT - (abs(UB_position) + abs(GEM_position) + ETF_position))
-        bid_quantity_ETF = min (bid_quantity_ETF, POSITION_LIMIT - (abs(UB_position) + abs(GEM_position) - ETF_position))
+        ask_quantity_UB_A = min (TRADING_LIMIT, POSITION_LIMIT - (UB_position + abs(GEM_position) + abs(ETF_position)))
+        bid_quantity_UB_A = min (TRADING_LIMIT, POSITION_LIMIT - (- UB_position + abs(GEM_position) + abs(ETF_position)))
+        ask_quantity_GEM_A = min (TRADING_LIMIT, POSITION_LIMIT - (abs(UB_position) + GEM_position + abs(ETF_position)))
+        bid_quantity_GEM_A = min (TRADING_LIMIT, POSITION_LIMIT - (abs(UB_position) - GEM_position + abs(ETF_position)))
+        ask_quantity_ETF_A = min (TRADING_LIMIT, POSITION_LIMIT - (abs(UB_position) + abs(GEM_position) + ETF_position))
+        bid_quantity_ETF_A = min (TRADING_LIMIT, POSITION_LIMIT - (abs(UB_position) + abs(GEM_position) - ETF_position))
+
+        ask_quantity_UB_B = min (TRADING_LIMIT, POSITION_LIMIT - UB_position)
+        bid_quantity_UB_B = min (TRADING_LIMIT, POSITION_LIMIT + UB_position)
+        ask_quantity_GEM_B = min (TRADING_LIMIT, POSITION_LIMIT - GEM_position)
+        bid_quantity_GEM_B = min (TRADING_LIMIT, POSITION_LIMIT + GEM_position)
+        ask_quantity_ETF_B = min (TRADING_LIMIT, POSITION_LIMIT - ETF_position)
+        bid_quantity_ETF_B = min (TRADING_LIMIT, POSITION_LIMIT + ETF_position)
         
         #Read the news and update the estimates
         
@@ -144,29 +145,25 @@ def main():
                     GEM_estimate.update({'max' : highest})
                 GEM_news_received = True
             
-            UB_estimate.update({'average': (UB_estimate['min'] + UB_estimate['max'])/2})
-            GEM_estimate.update({'average': (GEM_estimate['min'] + GEM_estimate['max'])/2})
-            
             ETF_estimate.update({'min' : GEM_estimate['min'] + UB_estimate['min']})
             ETF_estimate.update({'max' : GEM_estimate['max'] + UB_estimate['max']})
-            ETF_estimate.update({'average': UB_estimate['average'] + GEM_estimate['average']})  
             
         # Determine the optimal strategy
         
-        UB_long = UB_estimate['average'] - ask_price_UB
-        UB_short = bid_price_UB - UB_estimate['average']
-        GEM_long = GEM_estimate['average'] - ask_price_GEM
-        GEM_short = bid_price_GEM - GEM_estimate['average']
-        ETF_long = ETF_estimate['average'] - ask_price_ETF
-        ETF_short = bid_price_ETF - ETF_estimate['average']
+        UB_long = ((1 - CONFIDENCE_LEVEL))*(UB_estimate['max'] - UB_estimate['min']) + UB_estimate['min'] - ask_price_UB
+        UB_short = bid_price_UB - (UB_estimate['max'] - ((1 - CONFIDENCE_LEVEL))*(UB_estimate['max'] - UB_estimate['min']))
+        GEM_long = ((1 - CONFIDENCE_LEVEL))*(GEM_estimate['max'] - GEM_estimate['min']) + GEM_estimate['min'] - ask_price_GEM
+        GEM_short = bid_price_GEM - (GEM_estimate['max'] - ((1 - CONFIDENCE_LEVEL))*(GEM_estimate['max'] - GEM_estimate['min']))
+        ETF_long = ((1 - CONFIDENCE_LEVEL))*(ETF_estimate['max'] - ETF_estimate['min']) + ETF_estimate['min'] - ask_price_ETF
+        ETF_short = bid_price_ETF - (ETF_estimate['max'] - ((1 - CONFIDENCE_LEVEL))*(ETF_estimate['max'] - ETF_estimate['min']))
         
-        strategy = [({'ticker': 'UB', 'type': 'LIMIT', 'quantity': 0, 'price': 0, 'action': 'BUY'}, 0),
-                  ({'ticker': 'UB', 'type': 'LIMIT', 'quantity': ask_quantity_UB, 'price': ask_price_UB, 'action': 'BUY'}, UB_long),
-                  ({'ticker': 'UB', 'type': 'LIMIT', 'quantity': bid_quantity_UB, 'price': bid_price_UB, 'action': 'SELL'}, UB_short),
-                  ({'ticker': 'GEM', 'type': 'LIMIT', 'quantity': ask_quantity_GEM, 'price': ask_price_GEM, 'action': 'BUY'}, GEM_long),
-                  ({'ticker': 'GEM', 'type': 'LIMIT', 'quantity': bid_quantity_GEM, 'price': bid_price_GEM, 'action': 'SELL'}, GEM_short),
-                  ({'ticker': 'ETF', 'type': 'LIMIT', 'quantity': ask_quantity_ETF, 'price': ask_price_ETF, 'action': 'BUY'}, ETF_long),
-                  ({'ticker': 'ETF', 'type': 'LIMIT', 'quantity': bid_quantity_ETF, 'price': bid_price_ETF, 'action': 'SELL'}, ETF_short)]
+        strategy = [({'ticker': 'N/A', 'type': 'LIMIT', 'quantity': 0, 'price': 0, 'action': 'BUY'}, 0, 0),
+                  ({'ticker': 'UB', 'type': 'MARKET', 'quantity': ask_quantity_UB_A, 'price': ask_price_UB, 'action': 'BUY'}, UB_long, ask_quantity_UB_B),
+                  ({'ticker': 'UB', 'type': 'MARKET', 'quantity': bid_quantity_UB_A, 'price': bid_price_UB, 'action': 'SELL'}, UB_short, bid_quantity_UB_B),
+                  ({'ticker': 'GEM', 'type': 'MARKET', 'quantity': ask_quantity_GEM_A, 'price': ask_price_GEM, 'action': 'BUY'}, GEM_long, ask_quantity_GEM_B),
+                  ({'ticker': 'GEM', 'type': 'MARKET', 'quantity': bid_quantity_GEM_A, 'price': bid_price_GEM, 'action': 'SELL'}, GEM_short, bid_quantity_GEM_B),
+                  ({'ticker': 'ETF', 'type': 'MARKET', 'quantity': ask_quantity_ETF_A, 'price': ask_price_ETF, 'action': 'BUY'}, ETF_long, ask_quantity_ETF_B),
+                  ({'ticker': 'ETF', 'type': 'MARKET', 'quantity': bid_quantity_ETF_A, 'price': bid_price_ETF, 'action': 'SELL'}, ETF_short, bid_quantity_ETF_B)]
         
         strategy.sort(key = lambda tup: tup[1], reverse = True)
 
@@ -178,28 +175,47 @@ def main():
             order_received = is_received(order_id)
         
         if order_received:
-            if UB_news_received & GEM_news_received:
-                for counter in range(len(strategy)):
-                    if strategy[counter][1] > 0:
-                        quantity = strategy[counter][0]['quantity']
+            if UB_news_received or GEM_news_received:
+                if abs(UB_position) + abs(GEM_position) + abs(ETF_position) < POSITION_LIMIT:
+                    quantity = strategy[0][0]['quantity']
                 
-                        temp_strategy = strategy[counter][0]
-                        temp_strategy.update({'quantity': TRADING_LIMIT})
+                    temp_strategy = strategy[0][0]
+                    temp_strategy.update({'quantity': TRADING_LIMIT})
                 
-                        while quantity > TRADING_LIMIT:
-                            trade_leg = s.post('http://localhost:9999/v1/orders', params = temp_strategy)
-                            quantity = quantity - TRADING_LIMIT
-                        
-                        temp_strategy.update({'quantity': quantity})
+                    while quantity > TRADING_LIMIT:
                         trade_leg = s.post('http://localhost:9999/v1/orders', params = temp_strategy)
+                        quantity = quantity - TRADING_LIMIT
+                        
+                    temp_strategy.update({'quantity': quantity})
+                    trade_leg = s.post('http://localhost:9999/v1/orders', params = temp_strategy)
 
-                        if trade_leg.ok:
-                            order_id = trade_leg.json()['order_id']
-                    
-                        buy_cancel = s.post('http://localhost:9999/v1/commands/cancel', params={'query': 'Volume > 0'})
-                        sell_cancel = s.post('http://localhost:9999/v1/commands/cancel', params={'query': 'Volume < 0'})
+                    if trade_leg.ok:
+                        order_id = trade_leg.json()['order_id']
 
-        
+                else:
+                    optimal_unwind = -1
+                    optimal_unwind_needed = True
+                    optimal_rewind = -1
+                    optimal_rewind_needed = True
+
+                    for counter in range(len(strategy)):
+                        if ((strategy[counter][0]['quantity'] > 0) & (optimal_unwind_needed)):
+                            optimal_unwind = counter
+                            optimal_unwind_needed = False
+
+                        if ((strategy[counter][2] > 0) & (optimal_rewind_needed)):
+                            optimal_rewind = counter
+                            optimal_rewind_needed = False
+
+                    if not (optimal_unwind_needed or optimal_rewind_needed):
+                        if (strategy[optimal_unwind][1] + strategy[optimal_rewind][1]) > 0:
+                            temp_strategy = strategy[optimal_unwind][0]
+
+                            trade_leg = s.post('http://localhost:9999/v1/orders', params=temp_strategy)
+
+                            if trade_leg.ok:
+                                order_id = trade_leg.json()['order_id']
+
         status = get_status()
 
 if __name__ == '__main__':
